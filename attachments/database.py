@@ -6,7 +6,7 @@ import os
 import zipfile
 from datetime import datetime
 
-class DatabaseManager:
+DatabaseManager:
     def __init__(self, db_path):
         self.db_path = db_path
         self._init_db()
