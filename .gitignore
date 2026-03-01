@@ -1,0 +1,8 @@
+school_portal.db
+edutrack.db
+student_evidence/
+__pycache__/
+*.pyc
+venv/
+.env
+.streamlit/secrets.toml

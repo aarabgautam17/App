@@ -1,0 +1,7 @@
+streamlit
+pandas
+bcrypt
+google-genai
+fpdf
+plotly
+openpyxl
