@@ -2,12 +2,9 @@ import sqlite3
 import pandas as pd
 import bcrypt
 import io
-from datetime import datetime
-import zipfile
 import os
-
-
-
+import zipfile
+from datetime import datetime
 
 class DatabaseManager:
     def __init__(self, db_path):
@@ -49,7 +46,6 @@ class DatabaseManager:
                  mark INTEGER)''')
 
             # 4. AUTO-MIGRATION LOGIC
-            # This automatically fixes the "no such column" error by checking current structure
             cursor = conn.execute("PRAGMA table_info(activities)")
             columns = [column[1] for column in cursor.fetchall()]
             
@@ -63,7 +59,7 @@ class DatabaseManager:
                 if col_name not in columns:
                     conn.execute(f"ALTER TABLE activities ADD COLUMN {col_name} {col_type}")
             
-            # 5. Default Admin Creation (admin / admin123)
+            # 5. Default Admin Creation
             admin_check = conn.execute("SELECT * FROM users WHERE role='Admin'").fetchone()
             if not admin_check:
                 hashed = bcrypt.hashpw("admin123".encode(), bcrypt.gensalt())
@@ -81,7 +77,6 @@ class DatabaseManager:
         return None
 
     def create_user(self, sid, name, password, role="Student"):
-        """Creates a new user with a hashed password."""
         hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
         try:
             with self._get_connection() as conn:
@@ -92,32 +87,12 @@ class DatabaseManager:
         except sqlite3.IntegrityError:
             return False, "User ID already exists."
 
-    def reset_password(self, sid, new_password):
-        """Updates a user's password with a new hashed version."""
-        hashed = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt())
-        try:
-            with self._get_connection() as conn:
-                conn.execute("UPDATE users SET password=? WHERE student_id=?", 
-                             (hashed, sid))
-                conn.commit()
-            return True, f"Password for {sid} has been reset."
-        except Exception as e:
-            return False, str(e)
-
     # --- PORTFOLIO & APPROVAL ---
     def save_activity(self, sid, title, summary, skills, path=None, status='pending'):
-        """Saves project to portfolio."""
         date_str = datetime.now().strftime("%Y-%m-%d")
         with self._get_connection() as conn:
             conn.execute('''INSERT INTO activities (student_id, title, summary, skills, date, file_path, status) 
                             VALUES (?,?,?,?,?,?,?)''', (sid, title, summary, skills, date_str, path, status))
-            conn.commit()
-
-    def update_activity_status(self, student_id, title, date, new_status):
-        """Moves an item from 'pending' (Audit) to 'approved' (Gallery)."""
-        with self._get_connection() as conn:
-            conn.execute("UPDATE activities SET status=? WHERE student_id=? AND title=? AND date=?", 
-                         (new_status, student_id, title, date))
             conn.commit()
 
     def delete_activity(self, sid, title, date):
@@ -139,17 +114,6 @@ class DatabaseManager:
             activities = pd.read_sql("SELECT * FROM activities", conn)
             return users, grades, activities
 
-    # --- BACKUP & EXPORT ---
-    def export_to_excel(self):
-        """Generates an Excel file (in-memory) with all database tables."""
-        users, grades, activities = self.get_all_data_for_export()
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            users.to_excel(writer, sheet_name='Users', index=False)
-            grades.to_excel(writer, sheet_name='Academic_Grades', index=False)
-            activities.to_excel(writer, sheet_name='Portfolio_Activities', index=False)
-        return output.getvalue()
-
     # --- GRADE MANAGEMENT ---
     def update_grade(self, sid, year, term, subject, mark):
         with self._get_connection() as conn:
@@ -164,23 +128,26 @@ class DatabaseManager:
             conn.commit()
 
     def delete_user(self, sid):
-        """Cascading delete of a student and all related data."""
         with self._get_connection() as conn:
             conn.execute("DELETE FROM users WHERE student_id=?", (sid,))
             conn.execute("DELETE FROM grades WHERE student_id=?", (sid,))
             conn.execute("DELETE FROM activities WHERE student_id=?", (sid,))
             conn.commit()
 
-            def get_full_portfolio_zip(self, sid):
-             grades, activities = self.get_student_profile(sid)
-        
+    # --- EXPORT & ZIP (FIXED INDENTATION) ---
+    def get_full_portfolio_zip(self, sid):
+        grades, activities = self.get_student_profile(sid)
         zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
+        
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
             # 1. Prepare Excel Data
             excel_buffer = io.BytesIO()
             with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
                 grades.to_excel(writer, sheet_name='Grades', index=False)
                 activities.to_excel(writer, sheet_name='Portfolio', index=False)
+            
+            # zip_file.writestr needs bytes, so we seek(0) is not needed here 
+            # as ExcelWriter already finishes the stream
             zip_file.writestr(f"student_{sid}_report.xlsx", excel_buffer.getvalue())
             
             # 2. Add Images

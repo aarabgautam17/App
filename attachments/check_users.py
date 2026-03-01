@@ -1,16 +1,16 @@
 import sqlite3
+import pandas as pd
 
+# Connect to the database
 conn = sqlite3.connect("school_portal.db")
-cursor = conn.cursor()
 
-print("--- Current Registered Users ---")
-cursor.execute("SELECT student_id, role, name FROM users")
-rows = cursor.fetchall()
+print("--- EduTrack 360 User Roster ---")
+# Use pandas to read the SQL directly into a beautiful table
+df = pd.read_sql_query("SELECT student_id, role, name FROM users", conn)
 
-if not rows:
-    print("No users found. The database is empty!")
+if df.empty:
+    print("⚠️ Database is empty. No users registered.")
 else:
-    for row in rows:
-        print(f"ID: {row[0]} | Role: {row[1]} | Name: {row[2]}")
+    print(df.to_string(index=False))
 
 conn.close()
