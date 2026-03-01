@@ -165,19 +165,21 @@ if st.session_state.role == "Admin":
         st.dataframe(pending, use_container_width=True)
 
 # --- 7. STUDENT VIEW ---
+# --- 7. STUDENT VIEW ---
 else:
-    st.title("🎓 Student Journey")
+    st.title("🎓 Student Portal")
     t_ai, t_port, t_road = st.tabs(["💬 Achievement Journalist", "📂 Portfolio", "🤖 Career Mentor"])
 
     with t_ai:
         if st.session_state.interview_counter == -1:
-            st.session_state.event_grade_context = st.selectbox("Select Current Grade Level", [f"Grade {i}" for i in range(1,13)])
+            st.session_state.event_grade_context = st.selectbox("Grade Level", [f"Grade {i}" for i in range(1,13)])
         
         for m in st.session_state.chat_history:
-            with st.chat_message(m["role"]): st.markdown(m["content"])
+            with st.chat_message(m["role"]): 
+                st.markdown(m["content"])
 
         if not st.session_state.interview_complete:
-            if p := st.chat_input("What amazing thing did you do today?"):
+            if p := st.chat_input("What did you achieve today?"):
                 st.session_state.interview_counter += 1
                 st.session_state.chat_history.append({"role": "user", "content": p})
                 res = ai_core.get_ai_response(p, st.session_state.chat_history, st.session_state.interview_counter)
@@ -185,65 +187,64 @@ else:
                 
                 if "SAVE_DATA" in res:
                     try:
-                        data = res.split("SAVE_DATA")[1].strip(": ").split("|")
+                        parts = res.split("SAVE_DATA")[1].strip(": ").split("|")
                         st.session_state.pending_project = {
-                            "title": data[1].strip(), 
-                            "skills": data[2].strip(), 
-                            "summary": data[3].strip()
+                            "title": parts[1].strip(), 
+                            "skills": parts[2].strip(), 
+                            "summary": parts[3].strip()
                         }
                         st.session_state.interview_complete = True
-                    except:
-                        st.warning("AI processing issue. Please continue the chat.")
+                    except: 
+                        st.error("AI Formatting Error. Keep talking.")
                 st.rerun()
         else:
             with st.container(border=True):
-                st.info(f"Drafting: {st.session_state.pending_project['title']}")
-                up_img = st.file_uploader("Upload Evidence (Photo/Certificate)", type=['jpg','png','jpeg'])
-                if st.button("Finalize Achievement", type="primary"):
-                    path = pf_manager.save_evidence(st.session_state.user, up_img) if up_img else None
+                st.write(f"**Draft:** {st.session_state.pending_project['title']}")
+                up_img = st.file_uploader("Upload Evidence", type=['jpg', 'png'])
+                if st.button("Finalize Achievement") and up_img:
+                    path = pf_manager.save_evidence(st.session_state.user, up_img)
                     db.save_activity(st.session_state.user, st.session_state.pending_project['title'], 
                                      st.session_state.pending_project['summary'], 
                                      st.session_state.pending_project['skills'], path)
-                    # Force tag the grade context
+                    
                     with db._get_connection() as conn:
                         conn.execute("UPDATE activities SET grade_section=? WHERE student_id=? AND title=?", 
                                      (st.session_state.event_grade_context, st.session_state.user, st.session_state.pending_project['title']))
                     
                     st.session_state.update({'interview_complete': False, 'chat_history': [], 'interview_counter': -1})
-                    st.success("Achievement unlocked and saved!")
                     st.rerun()
 
     with t_port:
-        g_data, a_data = db.get_student_profile(st.session_state.user)
+        # These two columns MUST be at the same indentation level
+        c_list, c_man = st.columns([2, 1])
         
-        if not a_data.empty:
-            pdf_bytes = export_portfolio_pdf(st.session_state.name, a_data)
-            if pdf_bytes:
-                st.download_button("📥 Download Official Portfolio (PDF)", pdf_bytes, 
-                                 f"{st.session_state.name}_Portfolio.pdf", "application/pdf")
-            
-            st.divider()
-            for idx, row in a_data.iterrows():
-                with st.container(border=True):
-                    col_txt, col_img = st.columns([2, 1])
-                    with col_txt:
+        with c_man:
+            with st.form("manual"):
+                st.write("Manual Entry")
+                mt = st.text_input("Title")
+                ms = st.text_input("Skills")
+                if st.form_submit_button("Save"):
+                    db.save_activity(st.session_state.user, mt, "Manual Entry", ms, None)
+                    st.rerun()
+
+        with c_list:
+            g_data, a_data = db.get_student_profile(st.session_state.user)
+            if not a_data.empty:
+                pdf_bytes = export_portfolio_pdf(st.session_state.name, a_data)
+                st.download_button("📥 Download PDF", pdf_bytes, f"{st.session_state.name}_Portfolio.pdf", "application/pdf")
+                for _, row in a_data.iterrows():
+                    with st.container(border=True):
                         st.subheader(row['title'])
-                        st.caption(f"Level: {row.get('grade_section', 'N/A')} | Date: {row['date']}")
                         st.write(row['summary'])
-                        st.markdown(f"**Skills:** `{row['skills']}`")
-                        if st.button("🗑️ Remove", key=f"del_{idx}"):
-                            db.delete_activity(st.session_state.user, row['title'], row['date'])
-                            st.rerun()
-                    with col_img:
-                        if row['file_path'] and os.path.exists(row['file_path']):
+                        if row['file_path']: 
                             st.image(row['file_path'], use_container_width=True)
 
     with t_road:
         st.subheader("🤖 Career Mentor")
         for msg in st.session_state.roadmap_chat:
-            with st.chat_message(msg["role"]): st.markdown(msg["content"])
-            
-        if q := st.chat_input("Ask about your future career path..."):
+            with st.chat_message(msg["role"]): 
+                st.markdown(msg["content"])
+        if q := st.chat_input("Ask about your future..."):
             st.session_state.roadmap_chat.append({"role": "user", "content": q})
             res = ai_core.get_career_roadmap(g_data, a_data, q)
             st.session_state.roadmap_chat.append({"role": "assistant", "content": res})
