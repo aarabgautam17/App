@@ -213,31 +213,37 @@ else:
                     
                     st.session_state.update({'interview_complete': False, 'chat_history': [], 'interview_counter': -1})
                     st.rerun()
-
-    with t_port:
-        # These two columns MUST be at the same indentation level
+                    
+with t_port:
+        st.subheader("📂 Your Portfolio")
+        # 1. Define the columns
         c_list, c_man = st.columns([2, 1])
         
-        with c_man:
-            with st.form("manual"):
-                st.write("Manual Entry")
-                mt = st.text_input("Title")
-                ms = st.text_input("Skills")
-                if st.form_submit_button("Save"):
-                    db.save_activity(st.session_state.user, mt, "Manual Entry", ms, None)
-                    st.rerun()
-
+        # 2. Both 'with' blocks must start at the same indentation level
         with c_list:
             g_data, a_data = db.get_student_profile(st.session_state.user)
             if not a_data.empty:
-                pdf_bytes = export_portfolio_pdf(st.session_state.name, a_data)
-                st.download_button("📥 Download PDF", pdf_bytes, f"{st.session_state.name}_Portfolio.pdf", "application/pdf")
-                for _, row in a_data.iterrows():
+                for idx, row in a_data.iterrows():
                     with st.container(border=True):
-                        st.subheader(row['title'])
-                        st.write(row['summary'])
+                        st.markdown(f"### {row['title']}")
                         if row['file_path']: 
                             st.image(row['file_path'], use_container_width=True)
+                        st.write(row['summary'])
+                        if st.button("🗑️ Delete", key=f"std_del_{idx}"):
+                            db.delete_activity(st.session_state.user, row['title'], row['date'])
+                            st.rerun()
+            else:
+                st.info("Your portfolio is currently empty.")
+
+        with c_man:
+            with st.form("manual_entry_form"):
+                st.subheader("📝 Quick Add")
+                m_title = st.text_input("Project Title")
+                m_skills = st.text_input("Skills")
+                m_desc = st.text_area("Description")
+                if st.form_submit_button("Add to Portfolio"):
+                    db.save_activity(st.session_state.user, m_title, m_desc, m_skills)
+                    st.rerun()
 
     with t_road:
         st.subheader("🤖 Career Mentor")
