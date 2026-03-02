@@ -214,7 +214,7 @@ else:
                     st.session_state.update({'interview_complete': False, 'chat_history': [], 'interview_counter': -1})
                     st.rerun()
                     
-with t_port:
+    with t_port:
         st.subheader("📂 Your Portfolio")
         # 1. Define the columns
         c_list, c_man = st.columns([2, 1])
